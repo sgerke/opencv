@@ -381,6 +381,12 @@ enum
     CV_CAP_PROP_IRIS          =36,
     CV_CAP_PROP_SETTINGS      =37,
 
+
+    CV_CAP_PROP_I_FRAME      =124,
+    CV_CAP_PROP_GOP_SIZE     =125,
+    CV_FFMPEG_CAP_PROP_COLOR_RGB = 126,
+    CV_FFMPEG_CAP_PROP_SEEK_BACKWARD = 127,
+
     CV_CAP_PROP_AUTOGRAB      =1024, // property for highgui class CvCapture_Android only
     CV_CAP_PROP_SUPPORTED_PREVIEW_SIZES_STRING=1025, // readonly, tricky property, returns cpnst char* indeed
     CV_CAP_PROP_PREVIEW_FORMAT=1026, // readonly, tricky property, returns cpnst char* indeed

@@ -39,6 +39,7 @@
 // the use of this software, even if advised of the possibility of such damage.
 //
 //M*/
+#include <iostream>
 
 #include "cap_ffmpeg_api.hpp"
 #include <assert.h>
@@ -253,6 +254,13 @@ struct CvCapture_FFMPEG
    and so the filename is needed to reopen the file on backward seeking.
 */
     char              * filename;
+
+    //color format
+    PixelFormat pixel_fmt;
+
+    //seek flag
+    bool seek_backward;
+
 };
 
 void CvCapture_FFMPEG::init()
@@ -273,6 +281,9 @@ void CvCapture_FFMPEG::init()
     avcodec = 0;
     frame_number = 0;
     eps_zero = 0.000025;
+
+    pixel_fmt = PIX_FMT_BGR24;
+    seek_backward = true;
 }
 
 
@@ -552,7 +563,7 @@ bool CvCapture_FFMPEG::open( const char* _filename )
 //#ifdef FF_API_THREAD_INIT
 //        avcodec_thread_init(enc, get_number_of_cpus());
 //#else
-        enc->thread_count = get_number_of_cpus();
+        enc->thread_count = std::min(get_number_of_cpus(), 16);
 //#endif
 
 #if LIBAVFORMAT_BUILD < CALC_FFMPEG_VERSION(53, 2, 0)
@@ -584,10 +595,10 @@ bool CvCapture_FFMPEG::open( const char* _filename )
             picture = avcodec_alloc_frame();
 
             rgb_picture.data[0] = (uint8_t*)malloc(
-                    avpicture_get_size( PIX_FMT_BGR24,
+                    avpicture_get_size( pixel_fmt,
                                         enc->width, enc->height ));
             avpicture_fill( (AVPicture*)&rgb_picture, rgb_picture.data[0],
-                            PIX_FMT_BGR24, enc->width, enc->height );
+                            pixel_fmt, enc->width, enc->height );
 
             frame.width = enc->width;
             frame.height = enc->height;
@@ -689,7 +700,7 @@ bool CvCapture_FFMPEG::retrieveFrame(int, unsigned char** data, int* step, int* 
     if( !video_st || !picture->data[0] )
         return false;
 
-    avpicture_fill((AVPicture*)&rgb_picture, rgb_picture.data[0], PIX_FMT_RGB24,
+    avpicture_fill((AVPicture*)&rgb_picture, rgb_picture.data[0], pixel_fmt,
                    video_st->codec->width, video_st->codec->height);
 
     if( img_convert_ctx == NULL ||
@@ -707,7 +718,7 @@ bool CvCapture_FFMPEG::retrieveFrame(int, unsigned char** data, int* step, int* 
                 video_st->codec->width, video_st->codec->height,
                 video_st->codec->pix_fmt,
                 video_st->codec->width, video_st->codec->height,
-                PIX_FMT_BGR24,
+                pixel_fmt,
                 SWS_BICUBIC,
                 NULL, NULL, NULL
                 );
@@ -744,7 +755,7 @@ double CvCapture_FFMPEG::getProperty( int property_id )
     case CV_FFMPEG_CAP_PROP_POS_MSEC:
         return 1000.0*(double)frame_number/get_fps();
     case CV_FFMPEG_CAP_PROP_POS_FRAMES:
-        return (double)frame_number;
+        return (double)frame_number - 1;
     case CV_FFMPEG_CAP_PROP_POS_AVI_RATIO:
         return r2d(ic->streams[video_stream]->time_base);
     case CV_FFMPEG_CAP_PROP_FRAME_COUNT:
@@ -766,6 +777,21 @@ double CvCapture_FFMPEG::getProperty( int property_id )
 #else
         return (double)video_st->codec.codec_tag;
 #endif
+    case CV_CAP_PROP_I_FRAME:
+        if (picture)
+            return (double) picture->key_frame;
+        break;
+    case CV_CAP_PROP_GOP_SIZE:
+        return (double) video_st->codec->gop_size;
+        break;
+    case CV_FFMPEG_CAP_PROP_COLOR_RGB:
+           if(pixel_fmt == PIX_FMT_RGB24) return 1;
+           return 0;
+           break;
+    case CV_FFMPEG_CAP_PROP_SEEK_BACKWARD:
+          if(seek_backward) return 1;
+          return 0;
+          break;
     default:
         break;
     }
@@ -932,6 +958,22 @@ bool CvCapture_FFMPEG::setProperty( int property_id, double value )
 
             picture_pts=(int64_t)value;
         }
+        break;
+    case CV_FFMPEG_CAP_PROP_COLOR_RGB:
+        if ((int)value == 1)
+        {
+		std::cout << "Setting pixel_fmt to RGB." << std::endl;
+            pixel_fmt = PIX_FMT_RGB24;
+        }
+        else
+        {
+		std::cout << "Setting pixel_fmt to BGR." << std::endl;
+            pixel_fmt = PIX_FMT_BGR24;
+        }
+        break;
+
+    case CV_FFMPEG_CAP_PROP_SEEK_BACKWARD:
+        seek_backward = (int)value == 1;
         break;
     default:
         return false;
