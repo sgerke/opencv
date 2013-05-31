@@ -1,7 +1,9 @@
-#/usr/bin/env python
+#!/usr/bin/env python
 
 import hdr_parser, sys, re, os, cStringIO
 from string import Template
+
+ignored_arg_types = ["RNG*"]
 
 gen_template_check_self = Template("""    if(!PyObject_TypeCheck(self, &pyopencv_${name}_Type))
         return failmsgp("Incorrect type of self (must be '${name}' or its derivative)");
@@ -51,14 +53,14 @@ static void pyopencv_${name}_dealloc(PyObject* self)
     PyObject_Del(self);
 }
 
-static PyObject* pyopencv_from(const ${cname}& r)
+template<> PyObject* pyopencv_from(const ${cname}& r)
 {
     pyopencv_${name}_t *m = PyObject_NEW(pyopencv_${name}_t, &pyopencv_${name}_Type);
     m->v = r;
     return (PyObject*)m;
 }
 
-static bool pyopencv_to(PyObject* src, ${cname}& dst, const char* name="<unknown>")
+template<> bool pyopencv_to(PyObject* src, ${cname}& dst, const char* name)
 {
     if( src == NULL || src == Py_None )
         return true;
@@ -94,7 +96,7 @@ static void pyopencv_${name}_dealloc(PyObject* self)
     PyObject_Del(self);
 }
 
-static PyObject* pyopencv_from(const Ptr<${cname}>& r)
+template<> PyObject* pyopencv_from(const Ptr<${cname}>& r)
 {
     pyopencv_${name}_t *m = PyObject_NEW(pyopencv_${name}_t, &pyopencv_${name}_Type);
     new (&(m->v)) Ptr<$cname1>(); // init Ptr with placement new
@@ -102,7 +104,7 @@ static PyObject* pyopencv_from(const Ptr<${cname}>& r)
     return (PyObject*)m;
 }
 
-static bool pyopencv_to(PyObject* src, Ptr<${cname}>& dst, const char* name="<unknown>")
+template<> bool pyopencv_to(PyObject* src, Ptr<${cname}>& dst, const char* name)
 {
     if( src == NULL || src == Py_None )
         return true;
@@ -118,7 +120,7 @@ static bool pyopencv_to(PyObject* src, Ptr<${cname}>& dst, const char* name="<un
 """)
 
 gen_template_map_type_cvt = Template("""
-static bool pyopencv_to(PyObject* src, ${cname}& dst, const char* name="<unknown>");
+template<> bool pyopencv_to(PyObject* src, ${cname}& dst, const char* name);
 """)
 
 gen_template_set_prop_from_map = Template("""
@@ -214,8 +216,7 @@ simple_argtype_mapping = {
     "int": ("int", "i", "0"),
     "float": ("float", "f", "0.f"),
     "double": ("double", "d", "0"),
-    "c_string": ("char*", "s", '(char*)""'),
-    "string": ("std::string", "s", None)
+    "c_string": ("char*", "s", '(char*)""')
 }
 
 def normalize_class_name(name):
@@ -354,6 +355,7 @@ class ArgInfo(object):
             elif m == "/IO":
                 self.inputarg = True
                 self.outputarg = True
+                self.returnarg = True
             elif m.startswith("/A"):
                 self.isarray = True
                 self.arraylen = m[2:].strip()
@@ -425,9 +427,11 @@ class FuncVariant(object):
             argno += 1
             if a.name in self.array_counters:
                 continue
+            if a.tp in ignored_arg_types:
+                continue
             if a.returnarg:
                 outlist.append((a.name, argno))
-            if (not a.inputarg or a.returnarg) and a.isbig():
+            if (not a.inputarg) and a.isbig():
                 outarr_list.append((a.name, argno))
                 continue
             if not a.inputarg:
@@ -570,7 +574,7 @@ class FuncInfo(object):
             else:
                 code_fcall = "ERRWRAP2( "
                 if v.rettype:
-                    code_decl += "    " + simple_argtype_mapping.get(v.rettype, (v.rettype, None, None))[0]  + " retval;\n"
+                    code_decl += "    " + v.rettype + " retval;\n"
                     code_fcall += "retval = "
                 if ismethod:
                     code_fcall += "_self_->" + self.cname
@@ -585,6 +589,16 @@ class FuncInfo(object):
             # form the function/method call,
             # for the list of type mappings
             for a in v.args:
+                if a.tp in ignored_arg_types:
+                    defval = a.defval
+                    if not defval and a.tp.endswith("*"):
+                        defval = 0
+                    assert defval
+                    if not code_fcall.endswith("("):
+                        code_fcall += ", "
+                    code_fcall += defval
+                    all_cargs.append([[None, ""], ""])
+                    continue
                 tp1 = tp = a.tp
                 amp = ""
                 defval0 = ""
@@ -604,7 +618,10 @@ class FuncInfo(object):
                     if amapping[1] == "O":
                         code_decl += "    PyObject* pyobj_%s = NULL;\n" % (a.name,)
                         parse_name = "pyobj_" + a.name
-                        code_cvt_list.append("pyopencv_to(pyobj_%s, %s, %s)" % (a.name, a.name, a.crepr()))
+                        if a.tp == 'char':
+                            code_cvt_list.append("convert_to_char(pyobj_%s, &%s, %s)"% (a.name, a.name, a.crepr()))
+                        else:
+                            code_cvt_list.append("pyopencv_to(pyobj_%s, %s, %s)" % (a.name, a.name, a.crepr()))
 
                 all_cargs.append([amapping, parse_name])
 

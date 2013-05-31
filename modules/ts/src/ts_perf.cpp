@@ -1153,7 +1153,7 @@ void TestBase::RunPerfTestBody()
     {
         metrics.terminationReason = performance_metrics::TERM_EXCEPTION;
         #ifdef HAVE_CUDA
-            if (e.code == CV_GpuApiCallError)
+            if (e.code == cv::Error::GpuApiCallError)
                 cv::gpu::resetDevice();
         #endif
         FAIL() << "Expected: PerfTestBody() doesn't throw an exception.\n  Actual: it throws cv::Exception:\n  " << e.what();
@@ -1324,12 +1324,14 @@ void perf::sort(std::vector<cv::KeyPoint>& pts, cv::InputOutputArray descriptors
 /*****************************************************************************************\
 *                                  ::perf::GpuPerf
 \*****************************************************************************************/
-#ifdef HAVE_CUDA
 bool perf::GpuPerf::targetDevice()
 {
+#ifdef HAVE_CUDA
     return !param_run_cpu;
-}
+#else
+    return false;
 #endif
+}
 
 /*****************************************************************************************\
 *                                  ::perf::PrintTo

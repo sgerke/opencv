@@ -7,10 +7,11 @@
 //  copy or use the software.
 //
 //
-//                        Intel License Agreement
+//                           License Agreement
 //                For Open Source Computer Vision Library
 //
-// Copyright (C) 2000, Intel Corporation, all rights reserved.
+// Copyright (C) 2000-2008, Intel Corporation, all rights reserved.
+// Copyright (C) 2009, Willow Garage Inc., all rights reserved.
 // Third party copyrights are property of their respective owners.
 //
 // Redistribution and use in source and binary forms, with or without modification,
@@ -23,7 +24,7 @@
 //     this list of conditions and the following disclaimer in the documentation
 //     and/or other materials provided with the distribution.
 //
-//   * The name of Intel Corporation may not be used to endorse or promote products
+//   * The name of the copyright holders may not be used to endorse or promote products
 //     derived from this software without specific prior written permission.
 //
 // This software is provided by the copyright holders and contributors "as is" and
@@ -42,6 +43,8 @@
 #include "test_precomp.hpp"
 
 #ifdef HAVE_CUDA
+
+using namespace cvtest;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Integral
@@ -101,7 +104,7 @@ GPU_TEST_P(HistEven, Accuracy)
     ASSERT_FALSE(img.empty());
 
     cv::Mat hsv;
-    cv::cvtColor(img, hsv, CV_BGR2HSV);
+    cv::cvtColor(img, hsv, cv::COLOR_BGR2HSV);
 
     int hbins = 30;
     float hranges[] = {0.0f, 180.0f};
@@ -214,6 +217,50 @@ INSTANTIATE_TEST_CASE_P(GPU_ImgProc, EqualizeHist, testing::Combine(
     ALL_DEVICES,
     DIFFERENT_SIZES));
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// CLAHE
+
+namespace
+{
+    IMPLEMENT_PARAM_CLASS(ClipLimit, double)
+}
+
+PARAM_TEST_CASE(CLAHE, cv::gpu::DeviceInfo, cv::Size, ClipLimit)
+{
+    cv::gpu::DeviceInfo devInfo;
+    cv::Size size;
+    double clipLimit;
+
+    virtual void SetUp()
+    {
+        devInfo = GET_PARAM(0);
+        size = GET_PARAM(1);
+        clipLimit = GET_PARAM(2);
+
+        cv::gpu::setDevice(devInfo.deviceID());
+    }
+};
+
+GPU_TEST_P(CLAHE, Accuracy)
+{
+    cv::Mat src = randomMat(size, CV_8UC1);
+
+    cv::Ptr<cv::gpu::CLAHE> clahe = cv::gpu::createCLAHE(clipLimit);
+    cv::gpu::GpuMat dst;
+    clahe->apply(loadMat(src), dst);
+
+    cv::Ptr<cv::CLAHE> clahe_gold = cv::createCLAHE(clipLimit);
+    cv::Mat dst_gold;
+    clahe_gold->apply(src, dst_gold);
+
+    ASSERT_MAT_NEAR(dst_gold, dst, 1.0);
+}
+
+INSTANTIATE_TEST_CASE_P(GPU_ImgProc, CLAHE, testing::Combine(
+    ALL_DEVICES,
+    DIFFERENT_SIZES,
+    testing::Values(0.0, 40.0)));
+
 ////////////////////////////////////////////////////////////////////////
 // ColumnSum
 
@@ -306,7 +353,7 @@ GPU_TEST_P(Canny, Accuracy)
         }
         catch (const cv::Exception& e)
         {
-            ASSERT_EQ(CV_StsNotImplemented, e.code);
+            ASSERT_EQ(cv::Error::StsNotImplemented, e.code);
         }
     }
     else
@@ -370,7 +417,7 @@ GPU_TEST_P(MeanShift, Filtering)
     cv::Mat dst(d_dst);
 
     cv::Mat result;
-    cv::cvtColor(dst, result, CV_BGRA2BGR);
+    cv::cvtColor(dst, result, cv::COLOR_BGRA2BGR);
 
     EXPECT_MAT_NEAR(img_template, result, 0.0);
 }
@@ -443,7 +490,7 @@ GPU_TEST_P(MeanShiftSegmentation, Regression)
     cv::gpu::meanShiftSegmentation(loadMat(img), dst, 10, 10, minsize);
 
     cv::Mat dst_rgb;
-    cv::cvtColor(dst, dst_rgb, CV_BGRA2BGR);
+    cv::cvtColor(dst, dst_rgb, cv::COLOR_BGRA2BGR);
 
     EXPECT_MAT_SIMILAR(dst_gold, dst_rgb, 1e-3);
 }
@@ -616,8 +663,7 @@ INSTANTIATE_TEST_CASE_P(GPU_ImgProc, Convolve, testing::Combine(
 ////////////////////////////////////////////////////////////////////////////////
 // MatchTemplate8U
 
-CV_ENUM(TemplateMethod, cv::TM_SQDIFF, cv::TM_SQDIFF_NORMED, cv::TM_CCORR, cv::TM_CCORR_NORMED, cv::TM_CCOEFF, cv::TM_CCOEFF_NORMED)
-#define ALL_TEMPLATE_METHODS testing::Values(TemplateMethod(cv::TM_SQDIFF), TemplateMethod(cv::TM_SQDIFF_NORMED), TemplateMethod(cv::TM_CCORR), TemplateMethod(cv::TM_CCORR_NORMED), TemplateMethod(cv::TM_CCOEFF), TemplateMethod(cv::TM_CCOEFF_NORMED))
+CV_ENUM(TemplateMethod, TM_SQDIFF, TM_SQDIFF_NORMED, TM_CCORR, TM_CCORR_NORMED, TM_CCOEFF, TM_CCOEFF_NORMED)
 
 namespace
 {
@@ -663,7 +709,7 @@ INSTANTIATE_TEST_CASE_P(GPU_ImgProc, MatchTemplate8U, testing::Combine(
     DIFFERENT_SIZES,
     testing::Values(TemplateSize(cv::Size(5, 5)), TemplateSize(cv::Size(16, 16)), TemplateSize(cv::Size(30, 30))),
     testing::Values(Channels(1), Channels(3), Channels(4)),
-    ALL_TEMPLATE_METHODS));
+    TemplateMethod::all()));
 
 ////////////////////////////////////////////////////////////////////////////////
 // MatchTemplate32F
@@ -782,7 +828,7 @@ GPU_TEST_P(MatchTemplate_CCOEF_NORMED, Accuracy)
     ASSERT_FALSE(pattern.empty());
 
     cv::gpu::GpuMat d_dst;
-    cv::gpu::matchTemplate(loadMat(image), loadMat(pattern), d_dst, CV_TM_CCOEFF_NORMED);
+    cv::gpu::matchTemplate(loadMat(image), loadMat(pattern), d_dst, cv::TM_CCOEFF_NORMED);
 
     cv::Mat dst(d_dst);
 
@@ -791,7 +837,7 @@ GPU_TEST_P(MatchTemplate_CCOEF_NORMED, Accuracy)
     cv::minMaxLoc(dst, &minVal, &maxVal, &minLoc, &maxLoc);
 
     cv::Mat dstGold;
-    cv::matchTemplate(image, pattern, dstGold, CV_TM_CCOEFF_NORMED);
+    cv::matchTemplate(image, pattern, dstGold, cv::TM_CCOEFF_NORMED);
 
     double minValGold, maxValGold;
     cv::Point minLocGold, maxLocGold;
@@ -831,7 +877,7 @@ GPU_TEST_P(MatchTemplate_CanFindBigTemplate, SQDIFF_NORMED)
     ASSERT_FALSE(templ.empty());
 
     cv::gpu::GpuMat d_result;
-    cv::gpu::matchTemplate(loadMat(scene), loadMat(templ), d_result, CV_TM_SQDIFF_NORMED);
+    cv::gpu::matchTemplate(loadMat(scene), loadMat(templ), d_result, cv::TM_SQDIFF_NORMED);
 
     cv::Mat result(d_result);
 
@@ -854,7 +900,7 @@ GPU_TEST_P(MatchTemplate_CanFindBigTemplate, SQDIFF)
     ASSERT_FALSE(templ.empty());
 
     cv::gpu::GpuMat d_result;
-    cv::gpu::matchTemplate(loadMat(scene), loadMat(templ), d_result, CV_TM_SQDIFF);
+    cv::gpu::matchTemplate(loadMat(scene), loadMat(templ), d_result, cv::TM_SQDIFF);
 
     cv::Mat result(d_result);
 
@@ -872,7 +918,7 @@ INSTANTIATE_TEST_CASE_P(GPU_ImgProc, MatchTemplate_CanFindBigTemplate, ALL_DEVIC
 ////////////////////////////////////////////////////////////////////////////
 // MulSpectrums
 
-CV_FLAGS(DftFlags, 0, cv::DFT_INVERSE, cv::DFT_SCALE, cv::DFT_ROWS, cv::DFT_COMPLEX_OUTPUT, cv::DFT_REAL_OUTPUT)
+CV_FLAGS(DftFlags, 0, DFT_INVERSE, DFT_SCALE, DFT_ROWS, DFT_COMPLEX_OUTPUT, DFT_REAL_OUTPUT)
 
 PARAM_TEST_CASE(MulSpectrums, cv::gpu::DeviceInfo, cv::Size, DftFlags)
 {

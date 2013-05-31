@@ -146,7 +146,7 @@ CascadeClassifier::CascadeClassifier
 ----------------------------------------
 Loads a classifier from a file.
 
-.. ocv:function:: CascadeClassifier::CascadeClassifier(const string& filename)
+.. ocv:function:: CascadeClassifier::CascadeClassifier(const String& filename)
 
 .. ocv:pyfunction:: cv2.CascadeClassifier([filename]) -> <CascadeClassifier object>
 
@@ -167,7 +167,7 @@ CascadeClassifier::load
 ---------------------------
 Loads a classifier from a file.
 
-.. ocv:function:: bool CascadeClassifier::load(const string& filename)
+.. ocv:function:: bool CascadeClassifier::load(const String& filename)
 
 .. ocv:pyfunction:: cv2.CascadeClassifier.load(filename) -> retval
 
@@ -191,11 +191,9 @@ Detects objects of different sizes in the input image. The detected objects are 
 .. ocv:function:: void CascadeClassifier::detectMultiScale( const Mat& image, vector<Rect>& objects, double scaleFactor=1.1, int minNeighbors=3, int flags=0, Size minSize=Size(), Size maxSize=Size())
 
 .. ocv:pyfunction:: cv2.CascadeClassifier.detectMultiScale(image[, scaleFactor[, minNeighbors[, flags[, minSize[, maxSize]]]]]) -> objects
-.. ocv:pyfunction:: cv2.CascadeClassifier.detectMultiScale(image, rejectLevels, levelWeights[, scaleFactor[, minNeighbors[, flags[, minSize[, maxSize[, outputRejectLevels]]]]]]) -> objects
+.. ocv:pyfunction:: cv2.CascadeClassifier.detectMultiScale(image[, scaleFactor[, minNeighbors[, flags[, minSize[, maxSize[, outputRejectLevels]]]]]]) -> objects, rejectLevels, levelWeights
 
 .. ocv:cfunction:: CvSeq* cvHaarDetectObjects( const CvArr* image, CvHaarClassifierCascade* cascade, CvMemStorage* storage, double scale_factor=1.1, int min_neighbors=3, int flags=0, CvSize min_size=cvSize(0,0), CvSize max_size=cvSize(0,0) )
-
-.. ocv:pyoldfunction:: cv.HaarDetectObjects(image, cascade, storage, scale_factor=1.1, min_neighbors=3, flags=0, min_size=(0, 0)) -> detectedObjects
 
     :param cascade: Haar classifier cascade (OpenCV 1.x API only). It can be loaded from XML or YAML file using :ocv:cfunc:`Load`. When the cascade is not needed anymore, release it using ``cvReleaseHaarClassifierCascade(&cascade)``.
 

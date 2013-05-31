@@ -429,23 +429,35 @@ endmacro()
 macro(ocv_glob_module_sources)
   file(GLOB lib_srcs     "src/*.cpp")
   file(GLOB lib_int_hdrs "src/*.hpp" "src/*.h")
-  file(GLOB lib_hdrs     "include/opencv2/${name}/*.hpp" "include/opencv2/${name}/*.h")
+  file(GLOB lib_hdrs     "include/opencv2/*.hpp" "include/opencv2/${name}/*.hpp" "include/opencv2/${name}/*.h")
   file(GLOB lib_hdrs_detail "include/opencv2/${name}/detail/*.hpp" "include/opencv2/${name}/detail/*.h")
 
-  file(GLOB lib_device_srcs "src/cuda/*.cu")
-  set(device_objs "")
-  set(lib_device_hdrs "")
+  file(GLOB lib_cuda_srcs "src/cuda/*.cu")
+  set(cuda_objs "")
+  set(lib_cuda_hdrs "")
 
-  if (HAVE_CUDA AND lib_device_srcs)
+  if(HAVE_CUDA AND lib_cuda_srcs)
     ocv_include_directories(${CUDA_INCLUDE_DIRS})
-    file(GLOB lib_device_hdrs "src/cuda/*.hpp")
+    file(GLOB lib_cuda_hdrs "src/cuda/*.hpp")
 
-    ocv_cuda_compile(device_objs ${lib_device_srcs} ${lib_device_hdrs})
-    source_group("Src\\Cuda"      FILES ${lib_device_srcs} ${lib_device_hdrs})
+    ocv_cuda_compile(cuda_objs ${lib_cuda_srcs} ${lib_cuda_hdrs})
+    source_group("Src\\Cuda"      FILES ${lib_cuda_srcs} ${lib_cuda_hdrs})
+  endif()
+
+  file(GLOB cl_kernels "src/opencl/*.cl")
+
+  if(HAVE_OPENCL AND cl_kernels)
+    ocv_include_directories(${OPENCL_INCLUDE_DIRS})
+    add_custom_command(
+      OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/kernels.cpp"
+      COMMAND ${CMAKE_COMMAND} -DCL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/opencl" -DOUTPUT="${CMAKE_CURRENT_BINARY_DIR}/kernels.cpp" -P "${OpenCV_SOURCE_DIR}/cmake/cl2cpp.cmake"
+      DEPENDS ${cl_kernels} "${OpenCV_SOURCE_DIR}/cmake/cl2cpp.cmake")
+    source_group("Src\\OpenCL" FILES ${cl_kernels} "${CMAKE_CURRENT_BINARY_DIR}/kernels.cpp")
+    list(APPEND lib_srcs ${cl_kernels} "${CMAKE_CURRENT_BINARY_DIR}/kernels.cpp")
   endif()
 
   ocv_set_module_sources(${ARGN} HEADERS ${lib_hdrs} ${lib_hdrs_detail}
-                                 SOURCES ${lib_srcs} ${lib_int_hdrs} ${device_objs} ${lib_device_srcs} ${lib_device_hdrs})
+                                 SOURCES ${lib_srcs} ${lib_int_hdrs} ${cuda_objs} ${lib_cuda_srcs} ${lib_cuda_hdrs})
 
   source_group("Src" FILES ${lib_srcs} ${lib_int_hdrs})
   source_group("Include" FILES ${lib_hdrs})
@@ -459,11 +471,17 @@ endmacro()
 #   ocv_create_module(SKIP_LINK)
 macro(ocv_create_module)
   add_library(${the_module} ${OPENCV_MODULE_TYPE} ${OPENCV_MODULE_${the_module}_HEADERS} ${OPENCV_MODULE_${the_module}_SOURCES})
+  if(NOT the_module STREQUAL opencv_ts)
+    set_target_properties(${the_module} PROPERTIES COMPILE_DEFINITIONS OPENCV_NOSTL)
+  endif()
 
   if(NOT "${ARGN}" STREQUAL "SKIP_LINK")
     target_link_libraries(${the_module} ${OPENCV_MODULE_${the_module}_DEPS} ${OPENCV_MODULE_${the_module}_DEPS_EXT} ${OPENCV_LINKER_LIBS} ${IPP_LIBS} ${ARGN})
     if (HAVE_CUDA)
       target_link_libraries(${the_module} ${CUDA_LIBRARIES} ${CUDA_npp_LIBRARY})
+    endif()
+    if(HAVE_OPENCL AND OPENCL_LIBRARIES)
+      target_link_libraries(${the_module} ${OPENCL_LIBRARIES})
     endif()
   endif()
 
@@ -517,7 +535,7 @@ macro(ocv_create_module)
   if(OPENCV_MODULE_${the_module}_HEADERS AND ";${OPENCV_MODULES_PUBLIC};" MATCHES ";${the_module};")
     foreach(hdr ${OPENCV_MODULE_${the_module}_HEADERS})
       string(REGEX REPLACE "^.*opencv2/" "opencv2/" hdr2 "${hdr}")
-      if(hdr2 MATCHES "^(opencv2/.*)/[^/]+.h(..)?$")
+      if(NOT hdr2 MATCHES "opencv2/${the_module}/private.*" AND hdr2 MATCHES "^(opencv2/?.*)/[^/]+.h(..)?$" )
         install(FILES ${hdr} DESTINATION "${OPENCV_INCLUDE_INSTALL_PATH}/${CMAKE_MATCH_1}" COMPONENT main)
       endif()
     endforeach()
@@ -636,9 +654,6 @@ function(ocv_add_perf_tests)
 
       ocv_add_precompiled_headers(${the_target})
 
-      if (PYTHON_EXECUTABLE)
-        add_dependencies(perf ${the_target})
-      endif()
     else(OCV_DEPENDENCIES_FOUND)
       # TODO: warn about unsatisfied dependencies
     endif(OCV_DEPENDENCIES_FOUND)

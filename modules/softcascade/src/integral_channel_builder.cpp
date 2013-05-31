@@ -55,7 +55,7 @@ public:
 
     virtual int totalChannels() const {return N_CHANNELS; }
 
-    virtual void operator()(cv::InputArray _frame, CV_OUT cv::OutputArray _integrals, cv::Size channelsSize) const
+    virtual void operator()(cv::InputArray _frame, cv::OutputArray _integrals, cv::Size channelsSize) const
     {
         CV_Assert(_frame.type() == CV_8UC3);
 
@@ -76,7 +76,7 @@ public:
         channels.create(h * N_CHANNELS, w, CV_8UC1);
         channels.setTo(0);
 
-        cvtColor(frame, gray, CV_BGR2GRAY);
+        cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
         cv::Mat df_dx, df_dy, mag, angle;
         cv::Sobel(gray, df_dx, CV_32F, 1, 0);
@@ -102,13 +102,13 @@ public:
         }
 
         cv::Mat luv, shrunk;
-        cv::cvtColor(frame, luv, CV_BGR2Luv);
+        cv::cvtColor(frame, luv, cv::COLOR_BGR2Luv);
 
         std::vector<cv::Mat> splited;
         for (int i = 0; i < 3; ++i)
             splited.push_back(channels(cv::Rect(0, h * (7 + i), w, h)));
         split(luv, splited);
-        cv::resize(channels, shrunk, cv::Size(integrals.cols - 1, integrals.rows - 1), -1 , -1, CV_INTER_AREA);
+        cv::resize(channels, shrunk, cv::Size(integrals.cols - 1, integrals.rows - 1), -1 , -1, cv::INTER_AREA);
         cv::integral(shrunk, integrals, cv::noArray(), CV_32S);
     }
 };
@@ -122,7 +122,7 @@ CV_INIT_ALGORITHM(HOG6MagLuv,  "ChannelFeatureBuilder.HOG6MagLuv", );
 
 ChannelFeatureBuilder::~ChannelFeatureBuilder() {}
 
-cv::Ptr<ChannelFeatureBuilder> ChannelFeatureBuilder::create(const std::string& featureType)
+cv::Ptr<ChannelFeatureBuilder> ChannelFeatureBuilder::create(const cv::String& featureType)
 {
     return Algorithm::create<ChannelFeatureBuilder>("ChannelFeatureBuilder." + featureType);
 }
@@ -158,15 +158,14 @@ float ChannelFeature::operator() (const cv::Mat& integrals, const cv::Size& mode
     return (float)(a - b + c - d);
 }
 
-void cv::softcascade::write(cv::FileStorage& fs, const std::string&, const ChannelFeature& f)
+void cv::softcascade::write(cv::FileStorage& fs, const cv::String&, const ChannelFeature& f)
 {
     fs << "{" << "channel" << f.channel << "rect" << f.bb << "}";
 }
 
 std::ostream& cv::softcascade::operator<<(std::ostream& out, const ChannelFeature& m)
 {
-    out << m.channel << " " << m.bb;
-    return out;
+    return out << m.channel << " " << "[" << m.bb.width << " x " << m.bb.height << " from (" << m.bb.x << ", " << m.bb.y << ")]";
 }
 
 ChannelFeature::~ChannelFeature(){}
@@ -238,22 +237,8 @@ void ChannelFeaturePool::fill(int desired)
         int x = xRand(eng);
         int y = yRand(eng);
 
-#if __cplusplus >= 201103L
-        // The interface changed slightly going from uniform_int to
-        // uniform_int_distribution. See this page to understand
-        // the old behavior:
-        // http://www.boost.org/doc/libs/1_47_0/boost/random/uniform_int.hpp
-        int w = 1 + wRand(
-        eng,
-          // This extra "- 1" appears to be necessary, based on the Boost docs.
-        Random::uniform::param_type(0, (model.width  - x - 1) - 1));
-        int h = 1 + hRand(
-        eng,
-        Random::uniform::param_type(0, (model.height  - y - 1) - 1));
-#else
         int w = 1 + wRand(eng, model.width  - x - 1);
         int h = 1 + hRand(eng, model.height - y - 1);
-#endif
 
         CV_Assert(w > 0);
         CV_Assert(h > 0);

@@ -14,7 +14,6 @@ if(WIN32 AND NOT PYTHON_EXECUTABLE)
 endif()
 find_host_package(PythonInterp 2.0)
 
-unset(PYTHON_USE_NUMPY CACHE)
 unset(HAVE_SPHINX CACHE)
 if(PYTHON_EXECUTABLE)
   if(PYTHON_VERSION_STRING)
@@ -93,7 +92,6 @@ if(PYTHON_EXECUTABLE)
     endif()
 
     if(PYTHON_NUMPY_INCLUDE_DIR)
-      set(PYTHON_USE_NUMPY TRUE)
       execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy; print numpy.version.version"
                         RESULT_VARIABLE PYTHON_NUMPY_PROCESS
                         OUTPUT_VARIABLE PYTHON_NUMPY_VERSION
@@ -104,18 +102,12 @@ if(PYTHON_EXECUTABLE)
   if(BUILD_DOCS)
     find_host_program(SPHINX_BUILD sphinx-build)
     if(SPHINX_BUILD)
-        if(UNIX)
-            execute_process(COMMAND sh -c "${SPHINX_BUILD} -_ 2>&1 | sed -ne 1p"
-                             RESULT_VARIABLE SPHINX_PROCESS
-                             OUTPUT_VARIABLE SPHINX_VERSION
-                             OUTPUT_STRIP_TRAILING_WHITESPACE)
-        else()
-            execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import sphinx; print sphinx.__version__"
-                            RESULT_VARIABLE SPHINX_PROCESS
-                            OUTPUT_VARIABLE SPHINX_VERSION
-                            OUTPUT_STRIP_TRAILING_WHITESPACE)
-        endif()
-        if(SPHINX_PROCESS EQUAL 0)
+        execute_process(COMMAND "${SPHINX_BUILD}"
+                        OUTPUT_QUIET
+                        ERROR_VARIABLE SPHINX_OUTPUT
+                        OUTPUT_STRIP_TRAILING_WHITESPACE)
+        if(SPHINX_OUTPUT MATCHES "^Sphinx v([0-9][^ \n]*)")
+          set(SPHINX_VERSION "${CMAKE_MATCH_1}")
           set(HAVE_SPHINX 1)
           message(STATUS "Found Sphinx ${SPHINX_VERSION}: ${SPHINX_BUILD}")
         endif()

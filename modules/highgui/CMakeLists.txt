@@ -20,6 +20,12 @@ if(WITH_JPEG)
   list(APPEND GRFMT_LIBS ${JPEG_LIBRARIES})
 endif()
 
+if(WITH_WEBP)
+  add_definitions(-DHAVE_WEBP)
+  ocv_include_directories(${WEBP_INCLUDE_DIR})
+  list(APPEND GRFMT_LIBS ${WEBP_LIBRARIES})
+endif()
+
 if(WITH_PNG)
   add_definitions(-DHAVE_PNG)
   add_definitions(${PNG_DEFINITIONS})
@@ -68,9 +74,28 @@ set(highgui_srcs
     src/window.cpp
     )
 
-file(GLOB highgui_ext_hdrs "include/opencv2/${name}/*.hpp" "include/opencv2/${name}/*.h")
+file(GLOB highgui_ext_hdrs "include/opencv2/*.hpp" "include/opencv2/${name}/*.hpp" "include/opencv2/${name}/*.h")
 
-if(HAVE_QT)
+if(HAVE_QT5)
+  set(CMAKE_AUTOMOC ON)
+  set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+  QT5_ADD_RESOURCES(_RCC_OUTFILES src/window_QT.qrc)
+  list(APPEND highgui_srcs src/window_QT.cpp src/window_QT.h ${_RCC_OUTFILES})
+
+  foreach(dt5_dep Core Gui Widgets Test Concurrent)
+    add_definitions(${Qt5${dt5_dep}_DEFINITIONS})
+    include_directories(${Qt5${dt5_dep}_INCLUDE_DIRS})
+    list(APPEND HIGHGUI_LIBRARIES ${Qt5${dt5_dep}_LIBRARIES})
+  endforeach()
+
+  if(HAVE_QT_OPENGL)
+    add_definitions(${Qt5OpenGL_DEFINITIONS})
+    include_directories(${Qt5OpenGL_INCLUDE_DIRS})
+    list(APPEND HIGHGUI_LIBRARIES ${Qt5OpenGL_LIBRARIES})
+  endif()
+
+elseif(HAVE_QT)
   if (HAVE_QT_OPENGL)
     set(QT_USE_QTOPENGL TRUE)
   endif()
@@ -89,7 +114,7 @@ if(HAVE_QT)
   if(${_have_flag})
     set_source_files_properties(${_RCC_OUTFILES} PROPERTIES COMPILE_FLAGS -Wno-missing-declarations)
   endif()
-elseif(WIN32)
+elseif(HAVE_WIN32UI)
   list(APPEND highgui_srcs src/window_w32.cpp)
 elseif(HAVE_GTK)
   list(APPEND highgui_srcs src/window_gtk.cpp)
@@ -105,9 +130,21 @@ elseif(APPLE)
   endif()
 endif()
 
-if(WIN32)
-  list(APPEND highgui_srcs src/cap_vfw.cpp src/cap_cmu.cpp src/cap_dshow.cpp)
-endif(WIN32)
+if(WIN32 AND NOT ARM)
+  list(APPEND highgui_srcs src/cap_cmu.cpp)
+endif()
+
+if (WIN32 AND HAVE_DSHOW)
+  list(APPEND highgui_srcs src/cap_dshow.cpp)
+endif()
+
+if (WIN32 AND HAVE_MSMF)
+  list(APPEND highgui_srcs src/cap_msmf.cpp)
+endif()
+
+if (WIN32 AND HAVE_VFW)
+  list(APPEND highgui_srcs src/cap_vfw.cpp)
+endif()
 
 if(HAVE_XINE)
   list(APPEND highgui_srcs src/cap_xine.cpp)
@@ -203,6 +240,7 @@ endif()
 if(WIN32)
   link_directories("${OpenCV_SOURCE_DIR}/3rdparty/lib") # for ffmpeg wrapper only
   include_directories(AFTER SYSTEM "${OpenCV_SOURCE_DIR}/3rdparty/include") # for directshow in VS2005 and multi-monitor support on MinGW
+  include_directories(AFTER SYSTEM "${OpenCV_SOURCE_DIR}/3rdparty/include/ffmpeg_") # for tests
 endif()
 
 if(UNIX)

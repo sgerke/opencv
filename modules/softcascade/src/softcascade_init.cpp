@@ -51,11 +51,16 @@ CV_INIT_ALGORITHM(Detector, "SoftCascade.Detector",
                   obj.info()->addParam(obj, "scales",      obj.scales);
                   obj.info()->addParam(obj, "rejCriteria", obj.rejCriteria));
 
+CV_INIT_ALGORITHM(SCascade, "CascadeDetector.SCascade",
+                  obj.info()->addParam(obj, "minScale", obj.minScale);
+                  obj.info()->addParam(obj, "maxScale", obj.maxScale);
+                  obj.info()->addParam(obj, "scales",   obj.scales));
 
 bool initModule_softcascade(void)
 {
-    Ptr<Algorithm> sc1 = createDetector();
-    return (sc1->info() != 0);
+    Ptr<Algorithm> sc = createSCascade_hidden();
+    Ptr<Algorithm> sc1 = createDetector_hidden();
+    return (sc1->info() != 0) && (sc->info() != 0);
 }
 
 } }

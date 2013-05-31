@@ -2308,11 +2308,6 @@ double cv::Mahalanobis( InputArray _v1, InputArray _v2, InputArray _icovar )
     return std::sqrt(result);
 }
 
-double cv::Mahalonobis( InputArray _v1, InputArray _v2, InputArray _icovar )
-{
-    return Mahalanobis(_v1, _v2, _icovar);
-}
-
 /****************************************************************************************\
 *                                        MulTransposed                                   *
 \****************************************************************************************/
@@ -2855,8 +2850,9 @@ PCA& PCA::operator()(InputArray _data, InputArray __mean, int flags, int maxComp
 
     if( _mean.data )
     {
-        CV_Assert( _mean.size() == mean_sz );
+        CV_Assert( _mean.size() == mean_sz );        
         _mean.convertTo(mean, ctype);
+        covar_flags |= CV_COVAR_USE_AVG; 
     }
 
     calcCovarMatrix( data, covar, mean, covar_flags, ctype );
