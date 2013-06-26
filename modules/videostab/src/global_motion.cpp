@@ -47,6 +47,10 @@
 #include "opencv2/opencv_modules.hpp"
 #include "clp.hpp"
 
+#ifdef HAVE_OPENCV_GPU
+#  include "opencv2/gpu.hpp"
+#endif
+
 namespace cv
 {
 namespace videostab
@@ -356,6 +360,9 @@ Mat estimateGlobalMotionRansac(
     const int npoints = points0.getMat().checkVector(2);
     CV_Assert(points1.getMat().checkVector(2) == npoints);
 
+    if (npoints < params.size)
+        return Mat::eye(3, 3, CV_32F);
+
     const Point2f *points0_ = points0.getMat().ptr<Point2f>();
     const Point2f *points1_ = points1.getMat().ptr<Point2f>();
     const int niters = params.niters();
@@ -471,7 +478,7 @@ Mat MotionEstimatorRansacL2::estimate(InputArray points0, InputArray points1, bo
     else
     {
         std::vector<uchar> mask;
-        M = findHomography(points0, points1, mask, CV_LMEDS);
+        M = findHomography(points0, points1, mask, LMEDS);
         for (int i  = 0; i < npoints; ++i)
             if (mask[i]) ninliers++;
     }
@@ -504,7 +511,7 @@ Mat MotionEstimatorL1::estimate(InputArray points0, InputArray points1, bool *ok
 
 #ifndef HAVE_CLP
 
-    CV_Error(CV_StsError, "The library is built without Clp support");
+    CV_Error(Error::StsError, "The library is built without Clp support");
     if (ok) *ok = false;
     return Mat::eye(3, 3, CV_32F);
 
@@ -621,7 +628,7 @@ Mat MotionEstimatorL1::estimate(InputArray points0, InputArray points1, bool *ok
 }
 
 
-FromFileMotionReader::FromFileMotionReader(const std::string &path)
+FromFileMotionReader::FromFileMotionReader(const String &path)
     : ImageMotionEstimatorBase(MM_UNKNOWN)
 {
     file_.open(path.c_str());
@@ -641,7 +648,7 @@ Mat FromFileMotionReader::estimate(const Mat &/*frame0*/, const Mat &/*frame1*/,
 }
 
 
-ToFileMotionWriter::ToFileMotionWriter(const std::string &path, Ptr<ImageMotionEstimatorBase> estimator)
+ToFileMotionWriter::ToFileMotionWriter(const String &path, Ptr<ImageMotionEstimatorBase> estimator)
     : ImageMotionEstimatorBase(estimator->motionModel()), motionEstimator_(estimator)
 {
     file_.open(path.c_str());
@@ -674,6 +681,8 @@ Mat KeypointBasedMotionEstimator::estimate(const Mat &frame0, const Mat &frame1,
 {
     // find keypoints
     detector_->detect(frame0, keypointsPrev_);
+    if (keypointsPrev_.empty())
+        return Mat::eye(3, 3, CV_32F);
 
     // extract points from keypoints
     pointsPrev_.resize(keypointsPrev_.size());
@@ -728,7 +737,8 @@ Mat KeypointBasedMotionEstimator::estimate(const Mat &frame0, const Mat &frame1,
 }
 
 
-#ifdef HAVE_OPENCV_GPU
+#if defined(HAVE_OPENCV_GPUIMGPROC) && defined(HAVE_OPENCV_GPU) && defined(HAVE_OPENCV_GPUOPTFLOW)
+
 KeypointBasedMotionEstimatorGpu::KeypointBasedMotionEstimatorGpu(Ptr<MotionEstimatorBase> estimator)
     : ImageMotionEstimatorBase(estimator->motionModel()), motionEstimator_(estimator)
 {
@@ -754,7 +764,7 @@ Mat KeypointBasedMotionEstimatorGpu::estimate(const gpu::GpuMat &frame0, const g
         grayFrame0 = frame0;
     else
     {
-        gpu::cvtColor(frame0, grayFrame0_, CV_BGR2GRAY);
+        gpu::cvtColor(frame0, grayFrame0_, COLOR_BGR2GRAY);
         grayFrame0 = grayFrame0_;
     }
 
@@ -799,7 +809,8 @@ Mat KeypointBasedMotionEstimatorGpu::estimate(const gpu::GpuMat &frame0, const g
     // estimate motion
     return motionEstimator_->estimate(hostPointsPrev_, hostPoints_, ok);
 }
-#endif // HAVE_OPENCV_GPU
+
+#endif // defined(HAVE_OPENCV_GPUIMGPROC) && defined(HAVE_OPENCV_GPU) && defined(HAVE_OPENCV_GPUOPTFLOW)
 
 
 Mat getMotion(int from, int to, const std::vector<Mat> &motions)

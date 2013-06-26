@@ -4,8 +4,9 @@
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
-#include "opencv2/ocl/ocl.hpp"
-#include "opencv2/highgui/highgui.hpp"
+#include <opencv2/core/utility.hpp>
+#include "opencv2/ocl.hpp"
+#include "opencv2/highgui.hpp"
 
 using namespace std;
 using namespace cv;
@@ -45,7 +46,6 @@ public:
     bool gamma_corr;
 };
 
-
 class App
 {
 public:
@@ -64,6 +64,13 @@ public:
 
     string message() const;
 
+// This function test if gpu_rst matches cpu_rst.
+// If the two vectors are not equal, it will return the difference in vector size
+// Else if will return 
+// (total diff of each cpu and gpu rects covered pixels)/(total cpu rects covered pixels)
+    double checkRectSimilarity(Size sz, 
+                               std::vector<Rect>& cpu_rst, 
+                               std::vector<Rect>& gpu_rst);
 private:
     App operator=(App&);
 
@@ -290,13 +297,14 @@ void App::run()
         ocl::oclMat gpu_img;
 
         // Iterate over all frames
+        bool verify = false;
         while (running && !frame.empty())
         {
             workBegin();
 
             // Change format of the image
-            if (make_gray) cvtColor(frame, img_aux, CV_BGR2GRAY);
-            else if (use_gpu) cvtColor(frame, img_aux, CV_BGR2BGRA);
+            if (make_gray) cvtColor(frame, img_aux, COLOR_BGR2GRAY);
+            else if (use_gpu) cvtColor(frame, img_aux, COLOR_BGR2BGRA);
             else frame.copyTo(img_aux);
 
             // Resize image
@@ -316,7 +324,18 @@ void App::run()
                 gpu_img.upload(img);
                 gpu_hog.detectMultiScale(gpu_img, found, hit_threshold, win_stride,
                                          Size(0, 0), scale, gr_threshold);
-            }
+                if (!verify)
+                {
+                    // verify if GPU output same objects with CPU at 1st run
+                    verify = true;
+                    vector<Rect> ref_rst;
+                    cvtColor(img, img, COLOR_BGRA2BGR);
+                    cpu_hog.detectMultiScale(img, ref_rst, hit_threshold, win_stride,
+                                              Size(0, 0), scale, gr_threshold-2);
+                    double accuracy = checkRectSimilarity(img.size(), ref_rst, found);
+                    cout << "\naccuracy value: " << accuracy << endl;           
+                } 
+           }
             else cpu_hog.detectMultiScale(img, found, hit_threshold, win_stride,
                                           Size(0, 0), scale, gr_threshold);
             hogWorkEnd();
@@ -325,7 +344,7 @@ void App::run()
             for (size_t i = 0; i < found.size(); i++)
             {
                 Rect r = found[i];
-                rectangle(img_to_show, r.tl(), r.br(), CV_RGB(0, 255, 0), 3);
+                rectangle(img_to_show, r.tl(), r.br(), Scalar(0, 255, 0), 3);
             }
 
             if (use_gpu)
@@ -344,14 +363,14 @@ void App::run()
             {
                 if (!video_writer.isOpened())
                 {
-                    video_writer.open(args.dst_video, CV_FOURCC('x','v','i','d'), args.dst_video_fps,
+                    video_writer.open(args.dst_video, VideoWriter::fourcc('x','v','i','d'), args.dst_video_fps,
                                       img_to_show.size(), true);
                     if (!video_writer.isOpened())
                         throw std::runtime_error("can't create video writer");
                 }
 
-                if (make_gray) cvtColor(img_to_show, img, CV_GRAY2BGR);
-                else cvtColor(img_to_show, img, CV_BGRA2BGR);
+                if (make_gray) cvtColor(img_to_show, img, COLOR_GRAY2BGR);
+                else cvtColor(img_to_show, img, COLOR_BGRA2BGR);
 
                 video_writer << img;
             }
@@ -455,5 +474,47 @@ inline string App::workFps() const
     stringstream ss;
     ss << work_fps;
     return ss.str();
+}
+
+double App::checkRectSimilarity(Size sz, 
+                                std::vector<Rect>& ob1, 
+                                std::vector<Rect>& ob2)
+{
+    double final_test_result = 0.0;
+    size_t sz1 = ob1.size();
+    size_t sz2 = ob2.size();
+
+    if(sz1 != sz2)
+        return sz1 > sz2 ? (double)(sz1 - sz2) : (double)(sz2 - sz1);
+    else
+    {
+        cv::Mat cpu_result(sz, CV_8UC1);
+        cpu_result.setTo(0);
+
+        for(vector<Rect>::const_iterator r = ob1.begin(); r != ob1.end(); r++)
+        {      
+            cv::Mat cpu_result_roi(cpu_result, *r);
+            cpu_result_roi.setTo(1);
+            cpu_result.copyTo(cpu_result);
+        }
+        int cpu_area = cv::countNonZero(cpu_result > 0);
+
+        cv::Mat gpu_result(sz, CV_8UC1);
+        gpu_result.setTo(0);
+        for(vector<Rect>::const_iterator r2 = ob2.begin(); r2 != ob2.end(); r2++)
+        {
+            cv::Mat gpu_result_roi(gpu_result, *r2);
+            gpu_result_roi.setTo(1);
+            gpu_result.copyTo(gpu_result);
+        }
+
+        cv::Mat result_;
+        multiply(cpu_result, gpu_result, result_);
+        int result = cv::countNonZero(result_ > 0);
+
+        final_test_result = 1.0 - (double)result/(double)cpu_area;
+    }
+    return final_test_result;
+
 }
 
