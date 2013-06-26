@@ -718,9 +718,11 @@ bool CvCapture_FFMPEG::retrieveFrame(int, unsigned char** data, int* step, int* 
     avpicture_fill((AVPicture*)&rgb_picture, rgb_picture.data[0], pixel_fmt,
                    video_st->codec->width, video_st->codec->height);
 
+    bool pixel_fmt_changed = pixel_fmt != PIX_FMT_BGR24;
     if( img_convert_ctx == NULL ||
         frame.width != video_st->codec->width ||
-        frame.height != video_st->codec->height )
+        frame.height != video_st->codec->height ||
+        pixel_fmt_changed )
     {
         if( img_convert_ctx )
             sws_freeContext(img_convert_ctx);
